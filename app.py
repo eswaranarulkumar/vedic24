@@ -8,6 +8,13 @@ import swisseph as swe
 app = Flask(__name__)
 CORS(app)
 
+EPHEMERIS_PATH = os.path.join(os.path.dirname(__file__), "ephe")
+EPHEMERIS_FILES = ("sepl_18.se1", "semo_18.se1")
+
+
+class EphemerisUnavailable(RuntimeError):
+    pass
+
 API_KEY = os.environ.get("VEDIC24_API_KEY", "").strip()
 
 PLANETS = {
@@ -180,14 +187,23 @@ def swiss_chart():
         latitude = float(birth.get("latitude", 0))
         longitude = float(birth.get("longitude", 0))
 
+        for filename in EPHEMERIS_FILES:
+            if not os.path.isfile(os.path.join(EPHEMERIS_PATH, filename)):
+                raise EphemerisUnavailable("Swiss ephemeris data files are unavailable")
+        swe.set_ephe_path(EPHEMERIS_PATH)
         swe.set_sid_mode(swe.SIDM_LAHIRI)
         flags = swe.FLG_SWIEPH | swe.FLG_SIDEREAL | swe.FLG_SPEED
 
         sidereal_longitudes = {}
         planets = {}
+        returned_flags = {}
 
         for name, planet_id in PLANETS.items():
             result, ret_flag = swe.calc_ut(jd_ut, planet_id, flags)
+            ephemeris_mode = ret_flag & (swe.FLG_JPLEPH | swe.FLG_SWIEPH | swe.FLG_MOSEPH)
+            if ephemeris_mode != swe.FLG_SWIEPH:
+                raise EphemerisUnavailable("Swiss ephemeris file calculation is unavailable; fallback rejected")
+            returned_flags[name] = ret_flag
             lon = normalize_degree(result[0])
             speed = float(result[3]) if len(result) > 3 else 0.0
             sidereal_longitudes[name] = lon
@@ -230,6 +246,12 @@ def swiss_chart():
         return jsonify({
             "engine": "Swiss Ephemeris",
             "ayanamsa": "Lahiri",
+            "ephemeris": {
+                "mode": "swiss_files",
+                "requested_flags": flags,
+                "returned_flags": returned_flags,
+                "files": list(EPHEMERIS_FILES)
+            },
             "julian_day_ut": jd_ut,
             "utc_datetime": utc_dt.isoformat(),
             "ascendant_longitude": asc_lon,
@@ -246,6 +268,8 @@ def swiss_chart():
             "d9": d9
         })
 
+    except EphemerisUnavailable as exc:
+        return jsonify({"error": str(exc), "code": "ephemeris_unavailable"}), 503
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
 
