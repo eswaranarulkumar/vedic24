@@ -273,6 +273,10 @@ def swiss_chart():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
 
+from muhurta import register as register_muhurta
+register_muhurta(app, auth_ok, swe, EPHEMERIS_PATH)
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
     app.run(host="0.0.0.0", port=port)
+

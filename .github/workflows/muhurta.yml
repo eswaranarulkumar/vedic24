@@ -1,0 +1,16 @@
+name: Muhurta focused Linux verification
+on:
+  push:
+    branches: [codex/muhurta-414-rollout]
+permissions:
+  contents: read
+jobs:
+  native-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build exact production image and run focused native regressions
+        run: docker build --progress=plain -t vedic24-muhurta-check .
